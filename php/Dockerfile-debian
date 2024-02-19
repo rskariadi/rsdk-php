@@ -56,7 +56,9 @@ RUN install-php-extensions \
         gd \
         opcache \
         mysqli \
+        odbc \
         sqlsrv \
+        pdo_odbc \
         pdo_sqlsrv \
         pdo_mysql \
         pdo_pgsql \
