@@ -30,7 +30,7 @@ RUN chmod 777 \
 
 
 FROM min as dev
-ARG PECL_MONGODB_INSTALL_SUFFIX
+ARG PECL_MONGODB_INSTALL_SUFFIXW
 ARG PECL_XDEBUG_INSTALL_SUFFIX
 
 # Install system packages
@@ -55,6 +55,7 @@ RUN install-php-extensions \
         exif \
         gd \
         opcache \
+        mysqli \
         sqlsrv \
         pdo_sqlsrv \
         pdo_mysql \
