@@ -6,9 +6,8 @@ cat <<'MSG'
 |    \ / _` | '__| |/ _` |/ _` | | / _` |/ _ \ \ / /
 | |\  \ (_| | |  | | (_| | (_| | || (_| |  __/\ V / 
 \_| \_/\__,_|_|  |_|\__,_|\__,_|_(_)__,_|\___| \_/  
-                                                    
-                                                    
-Forked From : https://github.com/yiisoft/yii2-docker
+                                                                                                
+By Kariadi Developers
 
 MSG
 
