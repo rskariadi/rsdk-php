@@ -2,19 +2,14 @@
 ARG PHP_BASE_IMAGE_VERSION
 FROM php:${PHP_BASE_IMAGE_VERSION} as min
 
-# Install dependencies minimal
+# Install dependencies minimal + SQL Server ODBC
 RUN apt-get update && apt-get install -y \
     unzip git curl gnupg2 apt-transport-https unixodbc unixodbc-dev libicu-dev libmagickwand-dev libzip-dev \
     && mkdir -p /etc/apt/keyrings \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
     && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update
-
-# Install SQL Server drivers untuk PHP
-RUN ACCEPT_EULA=Y apt-get install -y \
-    msodbcsql18 \
-    mssql-tools18 \
-    libgssapi-krb5-2 \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 libgssapi-krb5-2 \
     && docker-php-ext-install pdo \
     && pecl install sqlsrv pdo_sqlsrv \
     && docker-php-ext-enable sqlsrv pdo_sqlsrv \
@@ -23,7 +18,7 @@ RUN ACCEPT_EULA=Y apt-get install -y \
 
 # Install PHP extensions via mlocati/php-extension-installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions intl gd zip bcmath exif opcache mysqli pdo_mysql pdo_pgsql imagick mongodb
+RUN install-php-extensions intl gd zip bcmath exif opcache mysqli pdo_mysql pdo_pgsql imagick mongodb xdebug
 
 # Environment settings
 ENV PHP_USER_ID=33 \
@@ -46,8 +41,6 @@ RUN chmod 755 /usr/local/bin/docker-php-entrypoint
 
 # DEV STAGE
 FROM min as dev
-ARG PECL_MONGODB_INSTALL_SUFFIX
-ARG PECL_XDEBUG_INSTALL_SUFFIX
 
 # Install dev tools
 RUN apt-get update && apt-get -y install --no-install-recommends \
@@ -56,11 +49,6 @@ RUN apt-get update && apt-get -y install --no-install-recommends \
 
 # Disable git's automatic conversion
 RUN git config --global core.autocrlf input
-
-# Tambah extension xdebug dan mongo
-RUN install-php-extensions \
-    xdebug${PECL_XDEBUG_INSTALL_SUFFIX} \
-    mongodb${PECL_MONGODB_INSTALL_SUFFIX}
 
 # Copy dev config files
 COPY image-files/dev/xdebug.ini /usr/local/etc/php/conf.d/
