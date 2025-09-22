@@ -1,148 +1,117 @@
-ARG PHP_BASE_IMAGE_VERSION=8.2-fpm
+# ARG untuk versi PHP base image
+ARG PHP_BASE_IMAGE_VERSION
+FROM php:${PHP_BASE_IMAGE_VERSION} as min
 
-# =====================
-# Stage 1: Base Image
-# =====================
-FROM php:${PHP_BASE_IMAGE_VERSION} as base
-
-# Install dependencies untuk key & curl
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl gnupg2 apt-transport-https ca-certificates \
+# Install dependencies minimal
+RUN apt-get update && apt-get install -y \
+    unzip git curl gnupg2 apt-transport-https unixodbc unixodbc-dev libicu-dev libmagickwand-dev libzip-dev \
     && mkdir -p /etc/apt/keyrings \
-    && curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
-        | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
-    && echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/microsoft.gpg] \
-        https://packages.microsoft.com/debian/11/prod bullseye main" \
-        > /etc/apt/sources.list.d/mssql-release.list \
+    && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
+    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update
 
-# Install php extension installer
+# Install SQL Server drivers untuk PHP
+RUN ACCEPT_EULA=Y apt-get install -y \
+    msodbcsql18 \
+    mssql-tools18 \
+    libgssapi-krb5-2 \
+    && docker-php-ext-install pdo \
+    && pecl install sqlsrv pdo_sqlsrv \
+    && docker-php-ext-enable sqlsrv pdo_sqlsrv \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions via mlocati/php-extension-installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+RUN install-php-extensions intl gd zip bcmath exif opcache mysqli pdo_mysql pdo_pgsql imagick mongodb
 
-# Install base PHP extensions
-RUN install-php-extensions intl
-
-# Setup environment
+# Environment settings
 ENV PHP_USER_ID=33 \
     PATH=/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH \
     TERM=linux
 
-WORKDIR /app
+# Copy base config files
+COPY image-files/base/php.ini /usr/local/etc/php/conf.d/
+COPY image-files/base/.bashrc /root/
 
-# Copy konfigurasi base
-COPY image-files/base/php.ini /usr/local/etc/php/php.ini
-COPY image-files/base/.bashrc /root/.bashrc
-
-RUN chmod 755 /usr/local/bin/docker-php-entrypoint
-
-# Enable apache modules jika ada
+# Enable mod_rewrite untuk apache
 RUN if command -v a2enmod >/dev/null 2>&1; then \
         a2enmod rewrite headers \
     ;fi
 
+# Application environment
+WORKDIR /app
+RUN chmod 755 /usr/local/bin/docker-php-entrypoint
 
-# =====================
-# Stage 2: Development
-# =====================
-FROM base as dev
 
-# Install tools & SQL Server driver
-RUN ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
-        msodbcsql18 \
-        mssql-tools18 \
-        unixodbc-dev \
-        git unzip procps \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# DEV STAGE
+FROM min as dev
+ARG PECL_MONGODB_INSTALL_SUFFIX
+ARG PECL_XDEBUG_INSTALL_SUFFIX
 
-# Disable git auto-crlf
+# Install dev tools
+RUN apt-get update && apt-get -y install --no-install-recommends \
+    git unzip procps \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Disable git's automatic conversion
 RUN git config --global core.autocrlf input
 
-# Install PHP extensions untuk dev
+# Tambah extension xdebug dan mongo
 RUN install-php-extensions \
-    pcntl soap zip bcmath exif gd mysqli odbc sqlsrv pdo_odbc pdo_sqlsrv pdo_mysql pdo_pgsql imagick mongodb xdebug
+    xdebug${PECL_XDEBUG_INSTALL_SUFFIX} \
+    mongodb${PECL_MONGODB_INSTALL_SUFFIX}
 
-# Copy konfigurasi dev
-COPY image-files/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
-COPY image-files/dev/error_reporting.ini /usr/local/etc/php/conf.d/error_reporting.ini
+# Copy dev config files
+COPY image-files/dev/xdebug.ini /usr/local/etc/php/conf.d/
+COPY image-files/dev/error_reporting.ini /usr/local/etc/php/conf.d/
 
-# Matikan xdebug by default
-RUN rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+# Disable xdebug by default
+RUN rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini || true
 
 # Install composer
 RUN curl -sS https://getcomposer.org/installer | php -- \
-        --filename=composer.phar \
-        --install-dir=/usr/local/bin && \
+    --filename=composer.phar \
+    --install-dir=/usr/local/bin && \
     chmod +x /usr/local/bin/composer && \
     composer clear-cache
 
+# Env settings for dev
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     PHP_ENABLE_XDEBUG=0
 
 
-# =====================
-# Stage 3: Apache
-# =====================
-FROM base as apache
-
+# NGINX MIN STAGE
+FROM min as nginx-min
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        apache2 libapache2-mod-php \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy konfigurasi apache
-COPY image-files/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
-
-CMD ["apache2-foreground"]
-
-EXPOSE 80 443
-
-
-# =====================
-# Stage 4: Nginx Minimal
-# =====================
-FROM base as nginx-min
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        nginx-full cron supervisor procps \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    nginx-full cron supervisor procps \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV SUPERVISOR_START_FPM=true \
     SUPERVISOR_START_NGINX=true
 
-# Copy konfigurasi nginx
 COPY image-files/nginx/default.conf /etc/nginx/conf.d/default.conf
-
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
- && ln -sf /dev/stderr /var/log/nginx/error.log \
- && ln -sf /usr/sbin/cron /usr/sbin/crond
+    && ln -sf /dev/stderr /var/log/nginx/error.log \
+    && ln -sf /usr/sbin/cron /usr/sbin/crond
 
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
-
 EXPOSE 80 443
 
 
-# =====================
-# Stage 5: Nginx Dev
-# =====================
+# NGINX DEV STAGE
 FROM dev as nginx-dev
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        nginx-full cron supervisor procps \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    nginx-full cron supervisor procps \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV SUPERVISOR_START_FPM=true \
     SUPERVISOR_START_NGINX=true
 
-# Copy konfigurasi nginx
 COPY image-files/nginx/default.conf /etc/nginx/conf.d/default.conf
-
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
- && ln -sf /var/log/nginx/error.log \
- && ln -sf /usr/sbin/cron /usr/sbin/crond
+    && ln -sf /dev/stderr /var/log/nginx/error.log \
+    && ln -sf /usr/sbin/cron /usr/sbin/crond
 
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
-
 EXPOSE 80 443
