@@ -8,10 +8,17 @@ FROM php:${PHP_BASE_IMAGE_VERSION} as base
 # ============================================
 # Fix Microsoft GPG Key untuk Debian 12 Bookworm
 # ============================================
-RUN mkdir -p /etc/apt/keyrings && \
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg && \
-    echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list && \
-    apt-get update
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg2 \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
+        | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
+    && echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/microsoft.gpg] \
+        https://packages.microsoft.com/debian/12/prod bookworm main" \
+        > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update
 
 # ============================================
 # Install minimal dependencies
