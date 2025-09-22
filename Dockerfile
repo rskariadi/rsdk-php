@@ -1,4 +1,3 @@
-# ARG versi PHP yang bisa diubah saat build
 ARG PHP_BASE_IMAGE_VERSION=8.2-fpm
 
 # =====================
@@ -29,7 +28,11 @@ ENV PHP_USER_ID=33 \
     TERM=linux
 
 WORKDIR /app
-COPY image-files/min/ /
+
+# Copy konfigurasi base
+COPY image-files/base/php.ini /usr/local/etc/php/php.ini
+COPY image-files/base/.bashrc /root/.bashrc
+
 RUN chmod 755 /usr/local/bin/docker-php-entrypoint
 
 # Enable apache modules jika ada
@@ -59,8 +62,9 @@ RUN git config --global core.autocrlf input
 RUN install-php-extensions \
     pcntl soap zip bcmath exif gd mysqli odbc sqlsrv pdo_odbc pdo_sqlsrv pdo_mysql pdo_pgsql imagick mongodb xdebug
 
-# Salin konfigurasi tambahan
-COPY image-files/dev/ /
+# Copy konfigurasi dev
+COPY image-files/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
+COPY image-files/dev/error_reporting.ini /usr/local/etc/php/conf.d/error_reporting.ini
 
 # Matikan xdebug by default
 RUN rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
@@ -77,7 +81,25 @@ ENV COMPOSER_ALLOW_SUPERUSER=1 \
 
 
 # =====================
-# Stage 3: Nginx Minimal
+# Stage 3: Apache
+# =====================
+FROM base as apache
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        apache2 libapache2-mod-php \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy konfigurasi apache
+COPY image-files/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
+
+CMD ["apache2-foreground"]
+
+EXPOSE 80 443
+
+
+# =====================
+# Stage 4: Nginx Minimal
 # =====================
 FROM base as nginx-min
 
@@ -89,7 +111,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV SUPERVISOR_START_FPM=true \
     SUPERVISOR_START_NGINX=true
 
-COPY image-files/nginx/ /
+# Copy konfigurasi nginx
+COPY image-files/nginx/default.conf /etc/nginx/conf.d/default.conf
 
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
  && ln -sf /dev/stderr /var/log/nginx/error.log \
@@ -101,7 +124,7 @@ EXPOSE 80 443
 
 
 # =====================
-# Stage 4: Nginx Dev
+# Stage 5: Nginx Dev
 # =====================
 FROM dev as nginx-dev
 
@@ -113,10 +136,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV SUPERVISOR_START_FPM=true \
     SUPERVISOR_START_NGINX=true
 
-COPY image-files/nginx/ /
+# Copy konfigurasi nginx
+COPY image-files/nginx/default.conf /etc/nginx/conf.d/default.conf
 
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
- && ln -sf /dev/stderr /var/log/nginx/error.log \
+ && ln -sf /var/log/nginx/error.log \
  && ln -sf /usr/sbin/cron /usr/sbin/crond
 
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
