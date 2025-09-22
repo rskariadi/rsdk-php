@@ -61,12 +61,12 @@ COPY image-files/dev/error_reporting.ini /usr/local/etc/php/conf.d/
 # Disable xdebug by default
 RUN rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini || true
 
-# Install composer
-RUN curl -sS https://getcomposer.org/installer | php -- \
-    --filename=composer.phar \
-    --install-dir=/usr/local/bin && \
-    chmod +x /usr/local/bin/composer && \
-    composer clear-cache
+# Install Composer via script resmi, lebih stabil
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
+    && php composer-setup.php --install-dir=/usr/local/bin --filename=composer \
+    && php -r "unlink('composer-setup.php');" \
+    && composer --version \
+    && composer clear-cache
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     PHP_ENABLE_XDEBUG=0
