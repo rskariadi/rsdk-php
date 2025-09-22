@@ -1,17 +1,27 @@
 # ============================================
-# RSUP Dr. Kariadi PHP Docker Image
+# RSUP Dr. Kariadi PHP Docker Image - Final
 # ============================================
 
 ARG PHP_BASE_IMAGE_VERSION
 FROM php:${PHP_BASE_IMAGE_VERSION} as base
 
-# Install extension installer
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+# ============================================
+# Fix Microsoft GPG Key untuk Debian 12 Bookworm
+# ============================================
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg && \
+    echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update
 
-# Install minimal PHP extensions
+# ============================================
+# Install minimal dependencies
+# ============================================
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions intl opcache
 
+# ============================================
 # Base environment
+# ============================================
 ENV PHP_USER_ID=33 \
     PATH=/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH \
     TERM=linux \
@@ -30,36 +40,19 @@ WORKDIR /app
 # ============================================
 FROM base as dev
 
-# Install dev tools
+# Install dev tools & SQL Server driver
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git \
-        unzip \
-        procps \
+        git unzip procps msodbcsql18 unixodbc-dev \
         && apt-get clean \
         && rm -rf /var/lib/apt/lists/*
 
 # Git config
 RUN git config --global core.autocrlf input
 
-# Install PHP extensions for dev
+# Install PHP extensions untuk development
 RUN install-php-extensions \
-        pcntl \
-        soap \
-        zip \
-        bcmath \
-        exif \
-        gd \
-        mysqli \
-        odbc \
-        sqlsrv \
-        pdo_odbc \
-        pdo_sqlsrv \
-        pdo_mysql \
-        pdo_pgsql \
-        imagick \
-        mongodb \
-        xdebug
+    pcntl soap zip bcmath exif gd mysqli odbc sqlsrv pdo_odbc pdo_sqlsrv pdo_mysql pdo_pgsql imagick mongodb xdebug
 
 # Copy dev configs (Xdebug, error reporting)
 COPY image-files/dev/ /usr/local/etc/php/conf.d/
@@ -81,8 +74,7 @@ FROM base as apache
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        apache2 \
-        libapache2-mod-php \
+        apache2 libapache2-mod-php \
         && apt-get clean \
         && rm -rf /var/lib/apt/lists/*
 
@@ -103,10 +95,7 @@ FROM base as nginx
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        nginx \
-        supervisor \
-        cron \
-        procps \
+        nginx supervisor cron procps \
         && apt-get clean \
         && rm -rf /var/lib/apt/lists/*
 
