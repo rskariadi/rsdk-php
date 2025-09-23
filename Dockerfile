@@ -1,119 +1,93 @@
-# =========================
-# Base Stage
-# =========================
-ARG PHP_BASE_IMAGE_VERSION
-FROM php:${PHP_BASE_IMAGE_VERSION} as min
+# ============================================
+# Base Stage: PHP + Extensions
+# ============================================
+ARG PHP_BASE_IMAGE_VERSION=8.2-fpm
+FROM php:${PHP_BASE_IMAGE_VERSION} AS base
 
-# Install dependencies minimal + SQL Server ODBC
-RUN apt-get update && apt-get install -y \
-    unzip git curl gnupg2 apt-transport-https unixodbc unixodbc-dev libicu-dev libmagickwand-dev libzip-dev \
+# Install dependencies & Microsoft ODBC driver
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gnupg2 apt-transport-https curl unzip git libzip-dev libicu-dev \
+    libgssapi-krb5-2 unixodbc unixodbc-dev libmagickwand-dev \
     && mkdir -p /etc/apt/keyrings \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
     && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 libgssapi-krb5-2 \
-    && docker-php-ext-install pdo \
-    && pecl install sqlsrv pdo_sqlsrv \
-    && docker-php-ext-enable sqlsrv pdo_sqlsrv \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions via mlocati/php-extension-installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions intl gd zip bcmath exif opcache mysqli pdo_mysql pdo_pgsql imagick mongodb xdebug
+RUN install-php-extensions intl gd zip bcmath exif opcache mysqli pdo_mysql pdo_pgsql imagick mongodb xdebug sqlsrv pdo_sqlsrv
 
-# Environment settings
-ENV PHP_USER_ID=33 \
-    PATH=/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH \
-    TERM=linux
+# Set environment & working dir
+ENV PATH="/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH" \
+    PHP_USER_ID=33 \
+    PHP_ENABLE_XDEBUG=0 \
+    COMPOSER_ALLOW_SUPERUSER=1
+WORKDIR /app
 
-# Copy base config files
+# Copy PHP base configs
 COPY image-files/base/php.ini /usr/local/etc/php/conf.d/
 COPY image-files/base/.bashrc /root/
 
-# Enable mod_rewrite untuk apache
-RUN if command -v a2enmod >/dev/null 2>&1; then \
-        a2enmod rewrite headers \
-    ;fi
+# Add non-root user for better security
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
 
-# Application environment
-WORKDIR /app
-RUN chmod 755 /usr/local/bin/docker-php-entrypoint
+# ============================================
+# Composer Stage
+# ============================================
+FROM base AS composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
-
-# =========================
+# ============================================
 # Dev Stage
-# =========================
-FROM min as php-dev
-
-# Install dev tools
-RUN apt-get update && apt-get -y install --no-install-recommends \
-    git unzip procps \
+# ============================================
+FROM composer AS dev
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends procps supervisor \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Disable git's automatic conversion
-RUN git config --global core.autocrlf input
-
-# Copy dev config files
+# Copy dev configs
 COPY image-files/dev/xdebug.ini /usr/local/etc/php/conf.d/
 COPY image-files/dev/error_reporting.ini /usr/local/etc/php/conf.d/
+RUN rm -f /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini || true
 
-# Disable xdebug by default
-RUN rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini || true
-
-# Install Composer via script resmi, lebih stabil
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
-    && php composer-setup.php --install-dir=/usr/local/bin --filename=composer \
-    && php -r "unlink('composer-setup.php');" \
-    && composer --version \
-    && composer clear-cache
-
-ENV COMPOSER_ALLOW_SUPERUSER=1 \
-    PHP_ENABLE_XDEBUG=0
-
-
-# =========================
+# ============================================
 # Nginx Stage
-# =========================
-FROM php-dev as php-nginx
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx-full cron supervisor procps \
+# ============================================
+FROM dev AS nginx
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends nginx-full \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-ENV SUPERVISOR_START_FPM=true \
-    SUPERVISOR_START_NGINX=true
-
+ENV SUPERVISOR_START_NGINX=true
 COPY image-files/nginx/default.conf /etc/nginx/conf.d/default.conf
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
-    && ln -sf /dev/stderr /var/log/nginx/error.log \
-    && ln -sf /usr/sbin/cron /usr/sbin/crond
+    && ln -sf /dev/stderr /var/log/nginx/error.log
 
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
 EXPOSE 80 443
+CMD ["php-fpm"]
 
-
-# =========================
+# ============================================
 # Apache Stage
-# =========================
-FROM min as php-apache
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    apache2 cron supervisor procps \
+# ============================================
+FROM dev AS apache
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends apache2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV SUPERVISOR_START_APACHE=true
-
 COPY image-files/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
 RUN ln -sf /dev/stdout /var/log/apache2/access.log \
-    && ln -sf /dev/stderr /var/log/apache2/error.log \
-    && ln -sf /usr/sbin/cron /usr/sbin/crond
+    && ln -sf /dev/stderr /var/log/apache2/error.log
 
-CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
 EXPOSE 80 443
+CMD ["apache2-foreground"]
 
-
-# =========================
-# Aliases untuk docker-compose
-# =========================
-FROM php-dev as dev
-FROM php-nginx as nginx
-FROM php-apache as apache
+# ============================================
+# Aliases for docker-compose
+# ============================================
+FROM dev AS php-dev
+FROM nginx AS php-nginx
+FROM apache AS php-apache
