@@ -28,15 +28,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN set -eux; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
-    docker-php-ext-install -j$(nproc) \
-        pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap opcache ftp pdo_pgsql gd
+    docker-php-ext-install -j$(nproc) gd
 
 RUN set -eux; \
     php -v; \
     php -m | sort
 
 RUN set -eux; \
-    install-php-extensions imagick mongodb redis xdebug
+    install-php-extensions \
+        pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap opcache ftp pdo_pgsql \
+        imagick mongodb redis xdebug
 
 RUN set -eux; \
     php -v; \
