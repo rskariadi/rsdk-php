@@ -18,7 +18,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update \
         && if [ "$MSSQL_PROFILE" = "legacy" ]; then \
                  ACCEPT_EULA=Y apt-get install -y msodbcsql17 mssql-tools; \
-                 sed -i 's/CipherString = DEFAULT@SECLEVEL=2/CipherString = DEFAULT@SECLEVEL=0\\nMinProtocol = TLSv1.0/g' /etc/ssl/openssl.cnf; \
+                 if grep -Eq '^\s*CipherString\s*=' /etc/ssl/openssl.cnf; then \
+                     sed -ri 's|^\s*CipherString\s*=.*$|CipherString = DEFAULT@SECLEVEL=0|' /etc/ssl/openssl.cnf; \
+                 else \
+                     printf '\nCipherString = DEFAULT@SECLEVEL=0\n' >> /etc/ssl/openssl.cnf; \
+                 fi; \
+                 if grep -Eq '^\s*MinProtocol\s*=' /etc/ssl/openssl.cnf; then \
+                     sed -ri 's|^\s*MinProtocol\s*=.*$|MinProtocol = TLSv1.0|' /etc/ssl/openssl.cnf; \
+                 else \
+                     printf 'MinProtocol = TLSv1.0\n' >> /etc/ssl/openssl.cnf; \
+                 fi; \
              else \
                  ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18; \
              fi \

@@ -52,7 +52,7 @@ jobs:
 
       - name: Verify preflight OpenSSL legacy config
         run: |
-          docker run --rm local/rsdk-php:preflight-dev-php7.4-legacy sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
+          docker run --rm local/rsdk-php:preflight-dev-php7.4-legacy sh -lc "grep -Eiq '^\s*CipherString\s*=\s*DEFAULT:?@SECLEVEL=0\s*$' /etc/ssl/openssl.cnf && grep -Eiq '^\s*MinProtocol\s*=\s*TLSv1(\.0)?\s*$' /etc/ssl/openssl.cnf"
 
   test-matrix:
     needs: preflight-legacy
@@ -119,7 +119,7 @@ jobs:
         run: |
           set -e
           IMAGE="local/rsdk-php:test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}"
-          docker run --rm "$IMAGE" sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
+          docker run --rm "$IMAGE" sh -lc "grep -Eiq '^\s*CipherString\s*=\s*DEFAULT:?@SECLEVEL=0\s*$' /etc/ssl/openssl.cnf && grep -Eiq '^\s*MinProtocol\s*=\s*TLSv1(\.0)?\s*$' /etc/ssl/openssl.cnf"
 
   push-matrix:
     runs-on: ubuntu-latest
