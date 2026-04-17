@@ -4,7 +4,8 @@ services:
       context: .
       target: dev
       args:
-        PHP_BASE_IMAGE_VERSION: "8.2-fpm"
+        PHP_BASE_IMAGE_VERSION: "${PHP_DEV_BASE_IMAGE_VERSION:-8.2-fpm}"
+        MSSQL_PROFILE: "${MSSQL_PROFILE:-modern}"
     volumes:
       - .:/app
     ports:
@@ -17,7 +18,8 @@ services:
       context: .
       target: nginx
       args:
-        PHP_BASE_IMAGE_VERSION: "8.2-fpm"
+        PHP_BASE_IMAGE_VERSION: "${PHP_NGINX_BASE_IMAGE_VERSION:-8.2-fpm}"
+        MSSQL_PROFILE: "${MSSQL_PROFILE:-modern}"
     ports:
       - "8080:80"
     volumes:
@@ -28,8 +30,23 @@ services:
       context: .
       target: apache
       args:
-        PHP_BASE_IMAGE_VERSION: "8.2-apache"
+        PHP_BASE_IMAGE_VERSION: "${PHP_APACHE_BASE_IMAGE_VERSION:-8.2-apache}"
+        MSSQL_PROFILE: "${MSSQL_PROFILE:-modern}"
     ports:
       - "8081:80"
     volumes:
       - .:/app
+
+  php-dev-legacy:
+    build:
+      context: .
+      target: dev
+      args:
+        PHP_BASE_IMAGE_VERSION: "${PHP_DEV_LEGACY_BASE_IMAGE_VERSION:-7.4-fpm}"
+        MSSQL_PROFILE: "legacy"
+    volumes:
+      - .:/app
+    ports:
+      - "9001:9000"
+    environment:
+      PHP_ENABLE_XDEBUG: 1

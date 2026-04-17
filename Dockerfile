@@ -2,22 +2,34 @@
 # Base Stage: PHP + Extensions
 # ============================================
 ARG PHP_BASE_IMAGE_VERSION=8.2-fpm
+ARG MSSQL_PROFILE=modern
 FROM php:${PHP_BASE_IMAGE_VERSION} AS base
 
-# Install dependencies & Microsoft ODBC driver
+ARG MSSQL_PROFILE
+
+# Install dependencies & Microsoft ODBC driver/profile
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg2 apt-transport-https curl unzip git libzip-dev libicu-dev \
-    libgssapi-krb5-2 unixodbc unixodbc-dev libmagickwand-dev \
+        libgssapi-krb5-2 unixodbc unixodbc-dev libmagickwand-dev \
+        libxml2-dev libpq-dev libonig-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
     && mkdir -p /etc/apt/keyrings \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
     && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 \
+        && if [ "$MSSQL_PROFILE" = "legacy" ]; then \
+                 ACCEPT_EULA=Y apt-get install -y msodbcsql17 mssql-tools; \
+                 sed -i 's/CipherString = DEFAULT@SECLEVEL=2/CipherString = DEFAULT@SECLEVEL=0\\nMinProtocol = TLSv1.0/g' /etc/ssl/openssl.cnf; \
+             else \
+                 ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18; \
+             fi \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions via mlocati/php-extension-installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions intl gd zip bcmath exif opcache mysqli pdo_mysql pdo_pgsql imagick mongodb xdebug sqlsrv pdo_sqlsrv
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+        && docker-php-ext-install -j$(nproc) \
+             pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap opcache ftp pdo_pgsql gd \
+        && install-php-extensions imagick mongodb redis xdebug sqlsrv pdo_sqlsrv
 
 # Set environment & working dir
 ENV PATH="/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH" \
