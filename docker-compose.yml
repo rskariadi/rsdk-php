@@ -5,7 +5,7 @@ services:
       target: dev
       args:
         PHP_BASE_IMAGE_VERSION: "${PHP_DEV_BASE_IMAGE_VERSION:-8.2-fpm}"
-        MSSQL_PROFILE: "${MSSQL_PROFILE:-modern}"
+        MSSQL_PROFILE: "${MSSQL_PROFILE:-legacy}"
     volumes:
       - .:/app
     ports:
@@ -19,7 +19,7 @@ services:
       target: nginx
       args:
         PHP_BASE_IMAGE_VERSION: "${PHP_NGINX_BASE_IMAGE_VERSION:-8.2-fpm}"
-        MSSQL_PROFILE: "${MSSQL_PROFILE:-modern}"
+        MSSQL_PROFILE: "${MSSQL_PROFILE:-legacy}"
     ports:
       - "8080:80"
     volumes:
@@ -31,7 +31,7 @@ services:
       target: apache
       args:
         PHP_BASE_IMAGE_VERSION: "${PHP_APACHE_BASE_IMAGE_VERSION:-8.2-apache}"
-        MSSQL_PROFILE: "${MSSQL_PROFILE:-modern}"
+        MSSQL_PROFILE: "${MSSQL_PROFILE:-legacy}"
     ports:
       - "8081:80"
     volumes:

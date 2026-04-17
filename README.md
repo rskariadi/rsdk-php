@@ -16,8 +16,8 @@ Official Docker images suitable for PHP Developer RSDK
 
 ## MSSQL Profiles
 
-- `modern` (default): ODBC 18 for newer SQL Server deployments
-- `legacy`: ODBC 17 + OpenSSL compatibility downgrade for SQL Server `2008` and `2012`
+- `legacy` (default): ODBC 17 + OpenSSL compatibility downgrade for SQL Server `2008` and `2012`
+- `modern` (optional): ODBC 18 for newer SQL Server deployments
 
 Legacy profile applies this OpenSSL patch inside the image:
 
@@ -75,7 +75,13 @@ docker compose up --build
 Use legacy MSSQL profile for SQL Server 2008/2012:
 
 ```sh
-MSSQL_PROFILE=legacy docker compose up --build php-dev
+docker compose up --build php-dev
+```
+
+Use modern MSSQL profile only when needed:
+
+```sh
+MSSQL_PROFILE=modern docker compose up --build php-dev
 ```
 
 Dedicated legacy service:
@@ -90,10 +96,15 @@ Workflow `.github/workflows/docker-publish.yml` now:
 
 - Builds and tests matrix PHP `7.4` through `8.5`
 - Builds targets: `dev`, `nginx`, `apache`
-- Tests MSSQL profiles: `modern` and `legacy` (`legacy` currently on `dev` target)
-- Runs extension smoke checks and validates legacy OpenSSL config isolation
+- Uses MSSQL profile `legacy` as default CI baseline
+- Runs a diagnostic legacy job first (`dev + PHP 7.4`) before full matrix
+- Runs extension smoke checks and validates OpenSSL legacy config
 - Pushes tags in format:
-  - `rskariadi/rsdk-php:dev-php8.2-modern`
   - `rskariadi/rsdk-php:dev-php7.4-legacy`
-  - `rskariadi/rsdk-php:nginx-php8.4-modern`
-  - `rskariadi/rsdk-php:apache-php8.1-modern`
+  - `rskariadi/rsdk-php:dev-php8.2-legacy`
+  - `rskariadi/rsdk-php:nginx-php8.4-legacy`
+  - `rskariadi/rsdk-php:apache-php8.1-legacy`
+
+## Compatibility Notes
+
+- SQL Server extension `sqlsrv` and `pdo_sqlsrv` are skipped on PHP `8.5` preview builds until official compatibility is available.

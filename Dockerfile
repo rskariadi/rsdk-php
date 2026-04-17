@@ -2,7 +2,7 @@
 # Base Stage: PHP + Extensions
 # ============================================
 ARG PHP_BASE_IMAGE_VERSION=8.2-fpm
-ARG MSSQL_PROFILE=modern
+ARG MSSQL_PROFILE=legacy
 FROM php:${PHP_BASE_IMAGE_VERSION} AS base
 
 ARG MSSQL_PROFILE
@@ -11,7 +11,7 @@ ARG MSSQL_PROFILE
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg2 apt-transport-https curl unzip git libzip-dev libicu-dev \
         libgssapi-krb5-2 unixodbc unixodbc-dev libmagickwand-dev \
-        libxml2-dev libpq-dev libonig-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
+        libxml2-dev libpq-dev libonig-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev zlib1g-dev pkg-config \
     && mkdir -p /etc/apt/keyrings \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
     && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
@@ -26,10 +26,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install PHP extensions via mlocati/php-extension-installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-        && docker-php-ext-install -j$(nproc) \
-             pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap opcache ftp pdo_pgsql gd \
-        && install-php-extensions imagick mongodb redis xdebug sqlsrv pdo_sqlsrv
+RUN set -eux; \
+    docker-php-ext-configure gd --with-freetype --with-jpeg; \
+    docker-php-ext-install -j$(nproc) \
+        pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap opcache ftp pdo_pgsql gd
+
+RUN set -eux; \
+    php -v; \
+    php -m | sort
+
+RUN set -eux; \
+    install-php-extensions imagick mongodb redis xdebug
+
+RUN set -eux; \
+    php -v; \
+    php -m | sort
+
+RUN set -eux; \
+    PHP_MM="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"; \
+    if [ "$PHP_MM" = "8.5" ]; then \
+        echo "Skipping sqlsrv/pdo_sqlsrv on PHP 8.5 preview"; \
+    else \
+        install-php-extensions sqlsrv pdo_sqlsrv; \
+    fi
 
 # Set environment & working dir
 ENV PATH="/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH" \

@@ -9,19 +9,49 @@ env:
   IMAGE_NAME: rskariadi/rsdk-php
 
 jobs:
+  diagnostic-legacy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build diagnostic legacy image (dev, PHP 7.4)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          target: dev
+          tags: local/rsdk-php:diagnostic-dev-php7.4-legacy
+          build-args: |
+            PHP_BASE_IMAGE_VERSION=7.4-fpm
+            MSSQL_PROFILE=legacy
+
+      - name: Verify diagnostic extension baseline
+        run: |
+          set -e
+          IMAGE="local/rsdk-php:diagnostic-dev-php7.4-legacy"
+          REQUIRED_EXTS="pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap ftp opcache gd pdo_pgsql mongodb redis sqlsrv pdo_sqlsrv imagick"
+          for ext in $REQUIRED_EXTS; do
+            docker run --rm "$IMAGE" php -m | grep -i "^$ext$" >/dev/null || {
+              echo "Missing extension: $ext"
+              exit 1
+            }
+          done
+
+      - name: Verify OpenSSL legacy config
+        run: |
+          docker run --rm local/rsdk-php:diagnostic-dev-php7.4-legacy sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
+
   test-matrix:
+    needs: diagnostic-legacy
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         php_version: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
         target: ["dev", "nginx", "apache"]
-        mssql_profile: ["modern", "legacy"]
-        exclude:
-          - target: nginx
-            mssql_profile: legacy
-          - target: apache
-            mssql_profile: legacy
+        mssql_profile: ["legacy"]
 
     steps:
       - name: Checkout repository
@@ -52,7 +82,10 @@ jobs:
         run: |
           set -e
           IMAGE="local/rsdk-php:test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}"
-          REQUIRED_EXTS="pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap ftp opcache gd pdo_pgsql mongodb redis sqlsrv pdo_sqlsrv imagick"
+          REQUIRED_EXTS="pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap ftp opcache gd pdo_pgsql mongodb redis imagick"
+          if [ "${{ matrix.php_version }}" != "8.5" ]; then
+            REQUIRED_EXTS="$REQUIRED_EXTS sqlsrv pdo_sqlsrv"
+          fi
           for ext in $REQUIRED_EXTS; do
             docker run --rm "$IMAGE" php -m | grep -i "^$ext$" >/dev/null || {
               echo "Missing extension: $ext"
@@ -60,15 +93,11 @@ jobs:
             }
           done
 
-      - name: Verify OpenSSL downgrade only in legacy profile
+      - name: Verify OpenSSL legacy config
         run: |
           set -e
           IMAGE="local/rsdk-php:test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}"
-          if [ "${{ matrix.mssql_profile }}" = "legacy" ]; then
-            docker run --rm "$IMAGE" sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
-          else
-            docker run --rm "$IMAGE" sh -lc "! grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf"
-          fi
+          docker run --rm "$IMAGE" sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
 
   push-matrix:
     runs-on: ubuntu-latest
@@ -79,12 +108,7 @@ jobs:
       matrix:
         php_version: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
         target: ["dev", "nginx", "apache"]
-        mssql_profile: ["modern", "legacy"]
-        exclude:
-          - target: nginx
-            mssql_profile: legacy
-          - target: apache
-            mssql_profile: legacy
+        mssql_profile: ["legacy"]
 
     steps:
       - name: Checkout repository
