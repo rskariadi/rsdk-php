@@ -55,6 +55,106 @@ Developer and utilities:
 - `xdebug`
 - `imagick`
 
+## Using Published Images from Docker Hub
+
+Published images are pushed to Docker Hub as `rskariadi/rsdk-php` with tags like:
+
+- `dev-php7.4-legacy`
+- `dev-php8.2-legacy`
+- `nginx-php8.4-legacy`
+- `apache-php8.1-legacy`
+
+Pull an image:
+
+```sh
+docker pull rskariadi/rsdk-php:dev-php8.2-legacy
+```
+
+Run a PHP shell inside the image:
+
+```sh
+docker run --rm -it \
+  -v "$PWD":/app \
+  -w /app \
+  rskariadi/rsdk-php:dev-php8.2-legacy \
+  bash
+```
+
+Run Composer from the published image:
+
+```sh
+docker run --rm -it \
+  -v "$PWD":/app \
+  -w /app \
+  rskariadi/rsdk-php:dev-php8.2-legacy \
+  composer install
+```
+
+Use the published image in `docker-compose.yml` by overriding the image name:
+
+```yaml
+services:
+  php-dev:
+    image: rskariadi/rsdk-php:dev-php8.2-legacy
+```
+
+Complete `docker-compose.yml` example (no local build):
+
+```yaml
+services:
+  php-dev:
+    image: rskariadi/rsdk-php:dev-php8.2-legacy
+    container_name: rsdk-php-dev
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "9000:9000"
+    environment:
+      PHP_ENABLE_XDEBUG: 1
+
+  php-nginx:
+    image: rskariadi/rsdk-php:nginx-php8.2-legacy
+    container_name: rsdk-php-nginx
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "8080:80"
+    depends_on:
+      - php-dev
+
+  php-apache:
+    image: rskariadi/rsdk-php:apache-php8.2-legacy
+    container_name: rsdk-php-apache
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "8081:80"
+```
+
+Run the published-image stack:
+
+```sh
+docker compose up -d
+```
+
+Run with modern MSSQL profile image tags (if published):
+
+```yaml
+services:
+  php-dev:
+    image: rskariadi/rsdk-php:dev-php8.2-modern
+```
+
+If you need the web server variant, use the matching tag:
+
+```sh
+docker pull rskariadi/rsdk-php:nginx-php8.2-legacy
+docker pull rskariadi/rsdk-php:apache-php8.2-legacy
+```
+
 ## Local Usage (docker-compose)
 
 Default:
@@ -97,7 +197,7 @@ Workflow `.github/workflows/docker-publish.yml` now:
 - Builds and tests matrix PHP `7.4` through `8.5`
 - Builds targets: `dev`, `nginx`, `apache`
 - Uses MSSQL profile `legacy` as default CI baseline
-- Runs a diagnostic legacy job first (`dev + PHP 7.4`) before full matrix
+- Runs a preflight legacy job first (`dev + PHP 7.4`) before full matrix
 - Runs extension smoke checks and validates OpenSSL legacy config
 - Pushes tags in format:
   - `rskariadi/rsdk-php:dev-php7.4-legacy`

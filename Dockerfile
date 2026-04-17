@@ -31,17 +31,9 @@ RUN set -eux; \
     docker-php-ext-install -j$(nproc) gd
 
 RUN set -eux; \
-    php -v; \
-    php -m | sort
-
-RUN set -eux; \
     install-php-extensions \
         pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap opcache ftp pdo_pgsql \
         imagick mongodb redis xdebug
-
-RUN set -eux; \
-    php -v; \
-    php -m | sort
 
 RUN set -eux; \
     PHP_MM="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"; \

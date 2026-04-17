@@ -9,42 +9,53 @@ env:
   IMAGE_NAME: rskariadi/rsdk-php
 
 jobs:
-  diagnostic-legacy:
+  preflight-legacy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build diagnostic legacy image (dev, PHP 7.4)
+      - name: Build preflight legacy image (dev, PHP 7.4)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: false
           load: true
           target: dev
-          tags: local/rsdk-php:diagnostic-dev-php7.4-legacy
+          tags: local/rsdk-php:preflight-dev-php7.4-legacy
           build-args: |
             PHP_BASE_IMAGE_VERSION=7.4-fpm
             MSSQL_PROFILE=legacy
 
-      - name: Verify diagnostic extension baseline
+      - name: Verify preflight extension baseline
         run: |
           set -e
-          IMAGE="local/rsdk-php:diagnostic-dev-php7.4-legacy"
+          IMAGE="local/rsdk-php:preflight-dev-php7.4-legacy"
           REQUIRED_EXTS="pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap ftp opcache gd pdo_pgsql mongodb redis sqlsrv pdo_sqlsrv imagick"
+          check_extension() {
+            ext="$1"
+            case "$ext" in
+              opcache)
+                docker run --rm "$IMAGE" php -m | grep -Ei '^(Zend OPcache|opcache)$' >/dev/null
+                ;;
+              *)
+                docker run --rm "$IMAGE" php -m | grep -i "^$ext$" >/dev/null
+                ;;
+            esac
+          }
           for ext in $REQUIRED_EXTS; do
-            docker run --rm "$IMAGE" php -m | grep -i "^$ext$" >/dev/null || {
+            check_extension "$ext" || {
               echo "Missing extension: $ext"
               exit 1
             }
           done
 
-      - name: Verify OpenSSL legacy config
+      - name: Verify preflight OpenSSL legacy config
         run: |
-          docker run --rm local/rsdk-php:diagnostic-dev-php7.4-legacy sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
+          docker run --rm local/rsdk-php:preflight-dev-php7.4-legacy sh -lc "grep -q 'DEFAULT@SECLEVEL=0' /etc/ssl/openssl.cnf && grep -q 'MinProtocol = TLSv1.0' /etc/ssl/openssl.cnf"
 
   test-matrix:
-    needs: diagnostic-legacy
+    needs: preflight-legacy
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -86,8 +97,19 @@ jobs:
           if [ "${{ matrix.php_version }}" != "8.5" ]; then
             REQUIRED_EXTS="$REQUIRED_EXTS sqlsrv pdo_sqlsrv"
           fi
+          check_extension() {
+            ext="$1"
+            case "$ext" in
+              opcache)
+                docker run --rm "$IMAGE" php -m | grep -Ei '^(Zend OPcache|opcache)$' >/dev/null
+                ;;
+              *)
+                docker run --rm "$IMAGE" php -m | grep -i "^$ext$" >/dev/null
+                ;;
+            esac
+          }
           for ext in $REQUIRED_EXTS; do
-            docker run --rm "$IMAGE" php -m | grep -i "^$ext$" >/dev/null || {
+            check_extension "$ext" || {
               echo "Missing extension: $ext"
               exit 1
             }
