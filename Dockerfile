@@ -96,20 +96,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends nginx-full \
 
 ENV SUPERVISOR_START_NGINX=true
 COPY image-files/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY image-files/nginx/php-fpm-socket.conf /usr/local/etc/php-fpm.d/zz-listen-socket.conf
+COPY image-files/supervisor/supervisord-nginx.conf /etc/supervisor/conf.d/supervisord-nginx.conf
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
-    && ln -sf /dev/stderr /var/log/nginx/error.log
+    && ln -sf /dev/stderr /var/log/nginx/error.log \
+    && mkdir -p /var/run
 
 EXPOSE 80 443
-CMD ["php-fpm"]
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord-nginx.conf"]
 
 # ============================================
 # Apache Stage
 # ============================================
 FROM dev AS apache
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends apache2 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
 ENV SUPERVISOR_START_APACHE=true
 COPY image-files/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
 RUN ln -sf /dev/stdout /var/log/apache2/access.log \

@@ -14,6 +14,9 @@ Official Docker images suitable for PHP Developer RSDK
 
 `php-dev` and `php-nginx` use `-fpm` variants. `php-apache` uses `-apache` variants.
 
+For `php-nginx`, the container runs both `nginx` and `php-fpm` under `supervisord`.
+Nginx forwards PHP requests through Unix socket `/var/run/php-fpm.sock`.
+
 ## MSSQL Profiles
 
 - `legacy` (default): ODBC 17 + OpenSSL compatibility downgrade for SQL Server `2008` and `2012`
@@ -121,8 +124,6 @@ services:
       - .:/app
     ports:
       - "8080:80"
-    depends_on:
-      - php-dev
 
   php-apache:
     image: rskariadi/rsdk-php:apache-php8.2-legacy
@@ -204,6 +205,12 @@ Workflow `.github/workflows/docker-publish.yml` now:
   - `rskariadi/rsdk-php:dev-php8.2-legacy`
   - `rskariadi/rsdk-php:nginx-php8.4-legacy`
   - `rskariadi/rsdk-php:apache-php8.1-legacy`
+
+Notes for web targets:
+
+- `nginx` target starts via `supervisord` to run `nginx` and `php-fpm` in one container.
+- `nginx` target uses FastCGI Unix socket (`/var/run/php-fpm.sock`) instead of service hostname.
+- `apache` target relies on `php:<version>-apache` base image and does not reinstall Apache via apt.
 
 ## Compatibility Notes
 
