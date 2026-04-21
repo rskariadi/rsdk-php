@@ -9,20 +9,20 @@ env:
   IMAGE_NAME: rskariadi/rsdk-php
 
 jobs:
-  preflight-legacy:
+  preflight:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build preflight legacy image (dev, PHP 7.4)
+      - name: Build preflight image (dev, PHP 7.4)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: false
           load: true
           target: dev
-          tags: local/rsdk-php:preflight-dev-php7.4-legacy
+          tags: local/rsdk-php:preflight-dev-php7.4
           build-args: |
             PHP_BASE_IMAGE_VERSION=7.4-fpm
             MSSQL_PROFILE=legacy
@@ -30,7 +30,7 @@ jobs:
       - name: Verify preflight extension baseline
         run: |
           set -e
-          IMAGE="local/rsdk-php:preflight-dev-php7.4-legacy"
+          IMAGE="local/rsdk-php:preflight-dev-php7.4"
           REQUIRED_EXTS="pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap ftp opcache gd pdo_pgsql mongodb redis sqlsrv pdo_sqlsrv imagick"
           check_extension() {
             ext="$1"
@@ -52,10 +52,10 @@ jobs:
 
       - name: Verify preflight OpenSSL legacy config
         run: |
-          docker run --rm local/rsdk-php:preflight-dev-php7.4-legacy sh -lc "grep -Eiq '^[[:space:]]*CipherString[[:space:]]*=[[:space:]]*DEFAULT:?@SECLEVEL=0[[:space:]]*$' /etc/ssl/openssl.cnf && grep -Eiq '^[[:space:]]*MinProtocol[[:space:]]*=[[:space:]]*TLSv1(\.0)?[[:space:]]*$' /etc/ssl/openssl.cnf"
+          docker run --rm local/rsdk-php:preflight-dev-php7.4 sh -lc "grep -Eiq '^[[:space:]]*CipherString[[:space:]]*=[[:space:]]*DEFAULT:?@SECLEVEL=0[[:space:]]*$' /etc/ssl/openssl.cnf && grep -Eiq '^[[:space:]]*MinProtocol[[:space:]]*=[[:space:]]*TLSv1(\.0)?[[:space:]]*$' /etc/ssl/openssl.cnf"
 
   test-matrix:
-    needs: preflight-legacy
+    needs: preflight
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -76,6 +76,11 @@ jobs:
           else
             echo "base_image=${{ matrix.php_version }}-fpm" >> "$GITHUB_OUTPUT"
           fi
+          if [ "${{ matrix.mssql_profile }}" = "legacy" ]; then
+            echo "test_tag=test-${{ matrix.target }}-php${{ matrix.php_version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "test_tag=test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build image for testing
         uses: docker/build-push-action@v5
@@ -84,7 +89,7 @@ jobs:
           push: false
           load: true
           target: ${{ matrix.target }}
-          tags: local/rsdk-php:test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}
+          tags: local/rsdk-php:${{ steps.vars.outputs.test_tag }}
           build-args: |
             PHP_BASE_IMAGE_VERSION=${{ steps.vars.outputs.base_image }}
             MSSQL_PROFILE=${{ matrix.mssql_profile }}
@@ -92,7 +97,7 @@ jobs:
       - name: Smoke test required extensions
         run: |
           set -e
-          IMAGE="local/rsdk-php:test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}"
+          IMAGE="local/rsdk-php:${{ steps.vars.outputs.test_tag }}"
           REQUIRED_EXTS="pdo_mysql mysqli mbstring exif pcntl bcmath intl zip soap ftp opcache gd pdo_pgsql mongodb redis imagick"
           if [ "${{ matrix.php_version }}" != "8.5" ]; then
             REQUIRED_EXTS="$REQUIRED_EXTS sqlsrv pdo_sqlsrv"
@@ -118,7 +123,7 @@ jobs:
       - name: Verify OpenSSL legacy config
         run: |
           set -e
-          IMAGE="local/rsdk-php:test-${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}"
+          IMAGE="local/rsdk-php:${{ steps.vars.outputs.test_tag }}"
           docker run --rm "$IMAGE" sh -lc "grep -Eiq '^[[:space:]]*CipherString[[:space:]]*=[[:space:]]*DEFAULT:?@SECLEVEL=0[[:space:]]*$' /etc/ssl/openssl.cnf && grep -Eiq '^[[:space:]]*MinProtocol[[:space:]]*=[[:space:]]*TLSv1(\.0)?[[:space:]]*$' /etc/ssl/openssl.cnf"
 
   push-matrix:
@@ -150,7 +155,11 @@ jobs:
           else
             echo "base_image=${{ matrix.php_version }}-fpm" >> "$GITHUB_OUTPUT"
           fi
-          echo "tag_suffix=${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.mssql_profile }}" = "legacy" ]; then
+            echo "tag_suffix=${{ matrix.target }}-php${{ matrix.php_version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_suffix=${{ matrix.target }}-php${{ matrix.php_version }}-${{ matrix.mssql_profile }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and Push Matrix Image
         uses: docker/build-push-action@v5

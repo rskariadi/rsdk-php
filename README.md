@@ -62,15 +62,15 @@ Developer and utilities:
 
 Published images are pushed to Docker Hub as `rskariadi/rsdk-php` with tags like:
 
-- `dev-php7.4-legacy`
-- `dev-php8.2-legacy`
-- `nginx-php8.4-legacy`
-- `apache-php8.1-legacy`
+- `dev-php7.4`
+- `dev-php8.2`
+- `nginx-php8.4`
+- `apache-php8.1`
 
 Pull an image:
 
 ```sh
-docker pull rskariadi/rsdk-php:dev-php8.2-legacy
+docker pull rskariadi/rsdk-php:dev-php8.2
 ```
 
 Run a PHP shell inside the image:
@@ -79,7 +79,7 @@ Run a PHP shell inside the image:
 docker run --rm -it \
   -v "$PWD":/app \
   -w /app \
-  rskariadi/rsdk-php:dev-php8.2-legacy \
+  rskariadi/rsdk-php:dev-php8.2 \
   bash
 ```
 
@@ -89,7 +89,7 @@ Run Composer from the published image:
 docker run --rm -it \
   -v "$PWD":/app \
   -w /app \
-  rskariadi/rsdk-php:dev-php8.2-legacy \
+  rskariadi/rsdk-php:dev-php8.2 \
   composer install
 ```
 
@@ -98,7 +98,7 @@ Use the published image in `docker-compose.yml` by overriding the image name:
 ```yaml
 services:
   php-dev:
-    image: rskariadi/rsdk-php:dev-php8.2-legacy
+    image: rskariadi/rsdk-php:dev-php8.2
 ```
 
 Complete `docker-compose.yml` example (no local build):
@@ -106,7 +106,7 @@ Complete `docker-compose.yml` example (no local build):
 ```yaml
 services:
   php-dev:
-    image: rskariadi/rsdk-php:dev-php8.2-legacy
+    image: rskariadi/rsdk-php:dev-php8.2
     container_name: rsdk-php-dev
     working_dir: /app
     volumes:
@@ -117,7 +117,7 @@ services:
       PHP_ENABLE_XDEBUG: 1
 
   php-nginx:
-    image: rskariadi/rsdk-php:nginx-php8.2-legacy
+    image: rskariadi/rsdk-php:nginx-php8.2
     container_name: rsdk-php-nginx
     working_dir: /app
     volumes:
@@ -126,7 +126,7 @@ services:
       - "8080:80"
 
   php-apache:
-    image: rskariadi/rsdk-php:apache-php8.2-legacy
+    image: rskariadi/rsdk-php:apache-php8.2
     container_name: rsdk-php-apache
     working_dir: /app
     volumes:
@@ -152,8 +152,8 @@ services:
 If you need the web server variant, use the matching tag:
 
 ```sh
-docker pull rskariadi/rsdk-php:nginx-php8.2-legacy
-docker pull rskariadi/rsdk-php:apache-php8.2-legacy
+docker pull rskariadi/rsdk-php:nginx-php8.2
+docker pull rskariadi/rsdk-php:apache-php8.2
 ```
 
 ## Local Usage (docker-compose)
@@ -198,13 +198,18 @@ Workflow `.github/workflows/docker-publish.yml` now:
 - Builds and tests matrix PHP `7.4` through `8.5`
 - Builds targets: `dev`, `nginx`, `apache`
 - Uses MSSQL profile `legacy` as default CI baseline
-- Runs a preflight legacy job first (`dev + PHP 7.4`) before full matrix
+- Runs a preflight job first (`dev + PHP 7.4`) before full matrix
 - Runs extension smoke checks and validates OpenSSL legacy config
 - Pushes tags in format:
-  - `rskariadi/rsdk-php:dev-php7.4-legacy`
-  - `rskariadi/rsdk-php:dev-php8.2-legacy`
-  - `rskariadi/rsdk-php:nginx-php8.4-legacy`
-  - `rskariadi/rsdk-php:apache-php8.1-legacy`
+  - `rskariadi/rsdk-php:dev-php7.4`
+  - `rskariadi/rsdk-php:dev-php8.2`
+  - `rskariadi/rsdk-php:nginx-php8.4`
+  - `rskariadi/rsdk-php:apache-php8.1`
+
+Tag migration note:
+
+- Default legacy tags no longer use the `-legacy` suffix.
+- Example migration: `dev-php8.2-legacy` to `dev-php8.2`.
 
 Notes for web targets:
 
