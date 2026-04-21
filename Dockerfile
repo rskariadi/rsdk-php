@@ -14,23 +14,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxml2-dev libpq-dev libonig-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev zlib1g-dev pkg-config \
     && mkdir -p /etc/apt/keyrings \
     && curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg \
-    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update \
-        && if [ "$MSSQL_PROFILE" = "legacy" ]; then \
-                 ACCEPT_EULA=Y apt-get install -y msodbcsql17 mssql-tools; \
-                 if grep -Eq '^\s*CipherString\s*=' /etc/ssl/openssl.cnf; then \
-                     sed -ri 's|^\s*CipherString\s*=.*$|CipherString = DEFAULT@SECLEVEL=0|' /etc/ssl/openssl.cnf; \
-                 else \
-                     printf '\nCipherString = DEFAULT@SECLEVEL=0\n' >> /etc/ssl/openssl.cnf; \
-                 fi; \
-                 if grep -Eq '^\s*MinProtocol\s*=' /etc/ssl/openssl.cnf; then \
-                     sed -ri 's|^\s*MinProtocol\s*=.*$|MinProtocol = TLSv1.0|' /etc/ssl/openssl.cnf; \
-                 else \
-                     printf 'MinProtocol = TLSv1.0\n' >> /etc/ssl/openssl.cnf; \
-                 fi; \
-             else \
-                 ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18; \
-             fi \
+    && { . /etc/os-release; \
+        DEBIAN_CODENAME="${VERSION_CODENAME:-bookworm}"; \
+        echo "Detected Debian: ${VERSION_ID} (${DEBIAN_CODENAME})"; \
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/${VERSION_ID}/prod $DEBIAN_CODENAME main" > /etc/apt/sources.list.d/mssql-release.list; \
+    } \
+    && apt-get update || { \
+        echo "Primary repo failed, attempting fallback to Debian 11..."; \
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/11/prod bullseye main" > /etc/apt/sources.list.d/mssql-release.list; \
+        apt-get update; \
+    } \
+    && if [ "$MSSQL_PROFILE" = "legacy" ]; then \
+        apt-cache search msodbcsql17 | grep -q msodbcsql17 || { echo "ERROR: msodbcsql17 not available in repo"; exit 1; }; \
+        ACCEPT_EULA=Y apt-get install -y msodbcsql17 mssql-tools; \
+        if grep -Eq '^\s*CipherString\s*=' /etc/ssl/openssl.cnf; then \
+            sed -ri 's|^\s*CipherString\s*=.*$|CipherString = DEFAULT@SECLEVEL=0|' /etc/ssl/openssl.cnf; \
+        else \
+            printf '\nCipherString = DEFAULT@SECLEVEL=0\n' >> /etc/ssl/openssl.cnf; \
+        fi; \
+        if grep -Eq '^\s*MinProtocol\s*=' /etc/ssl/openssl.cnf; then \
+            sed -ri 's|^\s*MinProtocol\s*=.*$|MinProtocol = TLSv1.0|' /etc/ssl/openssl.cnf; \
+        else \
+            printf 'MinProtocol = TLSv1.0\n' >> /etc/ssl/openssl.cnf; \
+        fi; \
+    else \
+        ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18; \
+    fi \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions via mlocati/php-extension-installer
